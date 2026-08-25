@@ -1,0 +1,8 @@
+PySide6
+pyqtgraph
+w1thermsensor
+adafruit-blinka
+adafruit-circuitpython-max31856
+RPi.GPIO
+spidev
+pyyaml

@@ -1,0 +1,13 @@
+[Unit]
+Description=BrewaTaco PID Controller
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/brewataco
+ExecStart=/usr/bin/python3 /home/pi/brewataco/run.py --config /home/pi/brewataco/config.yaml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
