@@ -1,0 +1,29 @@
+# Basic configuration (edit sensor ids / pins to match your wiring)
+sensors:
+  one_wire_ids:
+    Mash_tun: "28-00000aaaaaaa"
+    Mash_out: "28-00000bbbbbbb"
+    RIMS_Kettle: "28-00000ccccccc"
+  max31856_cs_pin: 5   # board pin identifier used by digitalio (e.g. D5) — change if you use CE0/CE1 or another GPIO
+
+control:
+  default_target: "Mash_tun"
+  cycle_time_seconds: 2.0     # SSR time-proportional control cycle (seconds)
+  control_interval_s: 0.5     # controller loop interval
+  pid:
+    Kp: 30.0
+    Ki: 0.5
+    Kd: 20.0
+    integrator_limit: 500.0
+
+safety:
+  RIMS_MAX_C: 95.0
+  RIMS_HYSTERESIS_C: 3.0
+  sensor_timeout_s: 10.0   # if a sensor hasn't updated in this many seconds, treat as failure
+
+heater:
+  gpio_pin: 17   # BCM pin controlling SSR (change if necessary)
+
+logging:
+  sample_interval_s: 1.0
+  history_length: 3600   # number of samples to retain per sensor (at sample_interval)
