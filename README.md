@@ -1,8 +1,8 @@
 # BrewaTaco
 
-BrewaTaco is a Python temperature-monitoring and mash-control application designed for a Raspberry Pi 4. It provides a PySide6 touchscreen-friendly dashboard, live temperature plots, PID control, and guarded SSR output control.
+BrewaTaco is a Python temperature-monitoring and mash-control application designed for a Raspberry Pi 4. It provides a PySide6 touchscreen-friendly dashboard, live temperature plots, PID control, and time-proportional heater output for homebrewing and similar temperature-managed tasks.
 
-> **Safety:** Keep the heater disconnected while installing and testing. Software interlocks are not a substitute for correctly rated hardware thermal cutoffs, safe electrical wiring, or supervision. Verify sensor readings and safety behavior before connecting a heater. The configured temperature display bands are informational and do not certify safe operating limits.
+> **Safety:** Keep the heater disconnected while installing and testing. Software interlocks are not a substitute for correctly rated hardware thermal cutoffs, safe electrical wiring, or supervision by the operator.
 
 ## Features
 
@@ -69,10 +69,15 @@ Before running against real hardware:
 
 1. Enable and verify the Raspberry Pi interfaces required by your wiring (one-wire and SPI, as applicable).
 2. Edit `config.yaml`: replace the example one-wire sensor IDs with the IDs detected on your Pi, and check the MAX31856 chip-select and heater GPIO settings against your actual wiring.
-3. Check all sensor names and probe locations, control and safety settings, and wiring before enabling heater output. Treat the supplied pin values, IDs, PID settings, and temperature thresholds as examples to verify for your equipment.
-4. First run with the heater disconnected. Confirm that sensors report plausible readings and test the interface in simulation mode. Have independent, correctly rated hardware over-temperature protection in place before any heater testing.
+3. Check all sensor names and probe locations, control and safety settings, and wiring before enabling heater output. Treat the supplied pin values, IDs, PID settings, and temperature thresholds as starting points to confirm against your actual installation.
+4. First run with the heater disconnected. Confirm that sensors report plausible readings and test the interface in simulation mode. Have independent, correctly rated hardware over-temperature protection and a safe wiring layout before re-enabling real heater control.
 
 The `--simulate` option substitutes simulated sensor/heater behavior; it does not validate physical wiring, real sensors, or hardware safety devices.
+
+Key control values in `config.yaml`:
+
+- `control.cycle_time_seconds`: the full duration of one heater duty cycle, in seconds. The controller switches the heater on and off across this window to achieve the requested duty percentage; shorter cycles respond more quickly, while longer cycles smooth the output. A value like `2.0` means the SSR can be on for 1.0s and off for 1.0s at 50% duty.
+- `control.control_interval_s`: how often the application recalculates the PID output and updates the heater duty, in seconds. This should be short enough to keep the temperature loop responsive, but not so short that it overburdens the CPU or causes unnecessary chattering. A value like `0.5` means the controller checks and updates roughly twice per second.
 
 ## Project files
 
@@ -90,7 +95,7 @@ The `--simulate` option substitutes simulated sensor/heater behavior; it does no
 
 - **`python3 -m venv` fails:** install the OS package that provides Python's `venv` module, then recreate the environment.
 - **A Python module is missing:** activate `.venv` and run `python -m pip install -r requirements.txt` again.
-- **Sensor readings are missing:** check the configured sensor IDs, enabled interfaces, wiring, and permissions. The GUI indicates missing readings; the controller watchdog forces heater output to zero when sensor data is unhealthy.
+- **Sensor readings are missing:** check the configured sensor IDs, enabled interfaces, wiring, and permissions. The GUI indicates missing readings; the controller watchdog forces heater output to zero when it detects a stalled or invalid sensor.
 - **GUI does not open:** run from the Pi's graphical desktop session and inspect the terminal output for Qt or display errors.
 
 ## Development notes
