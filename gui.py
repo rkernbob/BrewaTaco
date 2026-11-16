@@ -8,7 +8,7 @@ APP_STYLE = """
 QWidget { background: #101820; color: #eef4f6; font-family: sans-serif; font-size: 16px; }
 QLabel#muted { color: #9aabb5; }
 QLabel#eyebrow { color: #9aabb5; font-size: 13px; font-weight: 600; }
-QLabel#temperature { font-size: 32px; font-weight: 700; }
+QLabel#temperature { font-size: 29px; font-weight: 700; }
 QLabel#pageTitle { font-size: 24px; font-weight: 700; }
 QFrame#card, QFrame#panel { background: #1b2933; border: 1px solid #2d414e; border-radius: 12px; }
 QPushButton { background: #2b414e; border: 1px solid #3c5664; border-radius: 9px; min-height: 48px; padding: 0 16px; font-weight: 600; }
@@ -25,7 +25,6 @@ QProgressBar { background: #0e171d; border: 0; border-radius: 7px; min-height: 1
 QProgressBar::chunk { background: #24b49e; border-radius: 7px; }
 """
 
-# A simple severity palette used consistently for every temperature card.
 COLORS = {
     "cool": ("#18344a", "#62b9ee"),
     "normal": ("#193b35", "#74d5ad"),
@@ -36,24 +35,31 @@ COLORS = {
 
 
 class SensorCard(QtWidgets.QFrame):
-    def __init__(self, name, thresholds):
+    def __init__(self, name, thresholds, display_name=None, compact=False):
         super().__init__()
-        self.sensor_name = name
         self.thresholds = thresholds
         self.setObjectName("card")
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(15, 12, 15, 12)
-        layout.setSpacing(4)
+        self.setMinimumHeight(68 if compact else 78)
+        self.setMaximumHeight(78 if compact else 92)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
 
-        self.name_label = QtWidgets.QLabel(name.replace("_", " "))
+        layout = QtWidgets.QHBoxLayout(self) if compact else QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(12, 7, 12, 7)
+        layout.setSpacing(8 if compact else 2)
+        self.name_label = QtWidgets.QLabel(display_name or name.replace("_", " "))
         self.name_label.setObjectName("eyebrow")
         self.value_label = QtWidgets.QLabel("--.- °C")
         self.value_label.setObjectName("temperature")
-        self.state_label = QtWidgets.QLabel("Waiting for reading")
+        self.state_label = QtWidgets.QLabel("Waiting")
         self.state_label.setObjectName("muted")
-        layout.addWidget(self.name_label)
-        layout.addWidget(self.value_label)
-        layout.addWidget(self.state_label)
+        if compact:
+            layout.addWidget(self.name_label, 2)
+            layout.addWidget(self.value_label, 1)
+            layout.addWidget(self.state_label, 1)
+        else:
+            layout.addWidget(self.name_label)
+            layout.addWidget(self.value_label)
+            layout.addWidget(self.state_label)
 
     def _severity(self, value):
         warning = self.thresholds.get("warning_c")
@@ -85,19 +91,26 @@ class SensorCard(QtWidgets.QFrame):
 class DetailsWindow(QtWidgets.QMainWindow):
     """Expanded sensor plots, useful on a connected HDMI monitor."""
 
-    def __init__(self, controller):
+    def __init__(self, controller, return_to_dashboard):
         super().__init__()
         self.controller = controller
-        self.setWindowTitle("BrewaTaco — More details")
+        self.return_to_dashboard = return_to_dashboard
+        self.setWindowTitle("BrewaTaco — Temp Plots")
         self.resize(1000, 700)
         self.setMinimumSize(720, 520)
 
         container = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(container)
         layout.setContentsMargins(18, 14, 18, 14)
-        heading = QtWidgets.QLabel("Sensor history")
+        header = QtWidgets.QHBoxLayout()
+        heading = QtWidgets.QLabel("Temp Plots")
         heading.setObjectName("pageTitle")
-        layout.addWidget(heading)
+        header.addWidget(heading)
+        header.addStretch(1)
+        dashboard_button = QtWidgets.QPushButton("Dashboard")
+        dashboard_button.clicked.connect(self.return_to_dashboard)
+        header.addWidget(dashboard_button)
+        layout.addLayout(header)
 
         self.plot_widget = pg.GraphicsLayoutWidget()
         layout.addWidget(self.plot_widget, 1)
@@ -141,13 +154,12 @@ class MainWindow(QtWidgets.QMainWindow):
         pg.setConfigOptions(antialias=False, background="#101820", foreground="#dce7eb")
         self.sensor_names = list(controller.sensors)
         self.cards = {}
-        self._latest_payload = {}
         thresholds = controller.cfg.get("display", {}).get("temperature_thresholds_c", {})
 
         root = QtWidgets.QWidget()
         root_layout = QtWidgets.QVBoxLayout(root)
-        root_layout.setContentsMargins(16, 12, 16, 12)
-        root_layout.setSpacing(10)
+        root_layout.setContentsMargins(14, 10, 14, 10)
+        root_layout.setSpacing(7)
         self.setCentralWidget(root)
 
         header = QtWidgets.QHBoxLayout()
@@ -159,30 +171,54 @@ class MainWindow(QtWidgets.QMainWindow):
         header.addSpacing(12)
         header.addWidget(self.connection_label)
         header.addStretch(1)
-        self.details_button = QtWidgets.QPushButton("More details  ·  Ctrl+D")
+        self.details_button = QtWidgets.QPushButton("Temp Plots  ·  Ctrl+D")
         header.addWidget(self.details_button)
         root_layout.addLayout(header)
 
-        # Five equal-width cards make the newly added enclosure sensor visible
-        # alongside the brewing probes without taking space from the controls.
-        readings = QtWidgets.QHBoxLayout()
-        readings.setSpacing(9)
-        for name in self.sensor_names:
-            card = SensorCard(name, thresholds.get(name, {}))
-            self.cards[name] = card
-            readings.addWidget(card, 1)
-        root_layout.addLayout(readings)
+        # Arrange brewing probes in explicit pairs, with a shorter enclosure row.
+        sensor_grid = QtWidgets.QGridLayout()
+        sensor_grid.setHorizontalSpacing(9)
+        sensor_grid.setVerticalSpacing(6)
+        ordered_rows = [
+            ("Mash_tun", "Mash_out"),
+            ("RIMS_Kettle", "Boil_kettle"),
+            ("Controller_Enclosure",),
+        ]
+        listed = {name for row in ordered_rows for name in row}
+        ordered_rows.extend(
+            tuple(self.sensor_names[index:index + 2])
+            for index in range(0, len([name for name in self.sensor_names if name not in listed]), 2)
+        )
+        extras = [name for name in self.sensor_names if name not in listed]
+        for row_index, row_names in enumerate(ordered_rows):
+            # Skip the placeholder row if no additional sensors exist.
+            if not row_names or not any(name in self.sensor_names for name in row_names):
+                continue
+            for column, name in enumerate(row_names):
+                if name not in self.sensor_names:
+                    continue
+                compact = name == "Controller_Enclosure"
+                title_text = "Control Enclosure" if compact else name.replace("_", " ")
+                card = SensorCard(name, thresholds.get(name, {}), title_text, compact=compact)
+                self.cards[name] = card
+                sensor_grid.addWidget(card, row_index, column)
+        # Give the lone enclosure card the same row width as one standard card.
+        sensor_grid.setColumnStretch(0, 1)
+        sensor_grid.setColumnStretch(1, 1)
+        root_layout.addLayout(sensor_grid)
 
         plot_panel = QtWidgets.QFrame()
         plot_panel.setObjectName("panel")
+        plot_panel.setMaximumHeight(235)
         plot_layout = QtWidgets.QVBoxLayout(plot_panel)
-        plot_layout.setContentsMargins(14, 10, 14, 10)
+        plot_layout.setContentsMargins(12, 7, 12, 7)
+        plot_layout.setSpacing(4)
         plot_header = QtWidgets.QHBoxLayout()
         plot_title = QtWidgets.QLabel("Live temperature")
         plot_title.setObjectName("pageTitle")
         plot_header.addWidget(plot_title)
         plot_header.addStretch(1)
-        plot_header.addWidget(QtWidgets.QLabel("Showing"))
+        plot_header.addWidget(QtWidgets.QLabel("Control Temp"))
         self.sensor_combo = QtWidgets.QComboBox()
         self.sensor_combo.addItems(self.sensor_names)
         configured_sensor = str(controller.target_sensor_name)
@@ -196,7 +232,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.plot.showGrid(x=True, y=True, alpha=0.25)
         self.plot.setLabel("left", "Temperature", units="°C")
         self.plot.setLabel("bottom", "Elapsed time", units="s")
-        self.plot.setMinimumHeight(260)
+        self.plot.setMinimumHeight(135)
         self.temperature_curve = self.plot.plot(pen=pg.mkPen("#42d6bd", width=3))
         self.setpoint_line = pg.InfiniteLine(
             angle=0,
@@ -207,13 +243,11 @@ class MainWindow(QtWidgets.QMainWindow):
         plot_layout.addWidget(self.plot, 1)
         root_layout.addWidget(plot_panel, 1)
 
-        # Controls have their own horizontal row beneath the chart so the
-        # landscape 1280x800 panel uses its available vertical space.
         controls = QtWidgets.QFrame()
         controls.setObjectName("panel")
         controls_layout = QtWidgets.QHBoxLayout(controls)
-        controls_layout.setContentsMargins(14, 10, 14, 10)
-        controls_layout.setSpacing(12)
+        controls_layout.setContentsMargins(12, 8, 12, 8)
+        controls_layout.setSpacing(10)
 
         target_group = QtWidgets.QVBoxLayout()
         target_label = QtWidgets.QLabel("Target temperature")
@@ -237,12 +271,13 @@ class MainWindow(QtWidgets.QMainWindow):
         mode_label.setObjectName("eyebrow")
         buttons = QtWidgets.QHBoxLayout()
         self.auto_button = QtWidgets.QPushButton("AUTO")
-        self.off_button = QtWidgets.QPushButton("HEATER OFF")
-        self.full_button = QtWidgets.QPushButton("HEATER 100%")
+        self.off_button = QtWidgets.QPushButton("HEATER\nOFF")
+        self.full_button = QtWidgets.QPushButton("HEATER\n100%")
         self.mode_buttons = {"auto": self.auto_button, "off": self.off_button, "full": self.full_button}
         for mode, button in self.mode_buttons.items():
             button.setCheckable(True)
-            button.setMinimumHeight(54)
+            button.setMinimumHeight(66)
+            button.setMinimumWidth(112)
             button.clicked.connect(lambda checked=False, selected=mode: self.set_output_mode(selected))
             buttons.addWidget(button, 1)
         mode_group.addWidget(mode_label)
@@ -268,7 +303,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.safety_label.setWordWrap(True)
         root_layout.addWidget(self.safety_label)
 
-        self.details_window = DetailsWindow(controller)
+        self.details_window = DetailsWindow(controller, self.return_to_dashboard)
         self.details_button.clicked.connect(self.show_details)
         self.sensor_combo.currentTextChanged.connect(self.refresh_plot)
         self.target_spin.valueChanged.connect(self.on_target_changed)
@@ -314,7 +349,6 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
 
     def on_data_updated(self, payload):
-        self._latest_payload = payload
         latest = payload.get("latest", {})
         readings_ok = True
         for name, card in self.cards.items():
@@ -332,8 +366,7 @@ class MainWindow(QtWidgets.QMainWindow):
         rims_entry = latest.get("RIMS_Kettle")
         rims_value = rims_entry[1] if rims_entry else None
         if not readings_ok:
-            text = "Safety: sensor reading missing — heater output forced to 0%."
-            color = "#ff827b"
+            text, color = "Safety: sensor reading missing — heater output forced to 0%.", "#ff827b"
         elif rims_value is not None and float(rims_value) >= self.controller.RIMS_MAX:
             text = f"SAFETY CUTOFF: RIMS at {float(rims_value):.1f} °C; heater disabled until it cools below the reset threshold."
             color = "#ff827b"
@@ -341,19 +374,13 @@ class MainWindow(QtWidgets.QMainWindow):
             text = "Manual 100% output selected. Sensor watchdog and RIMS over-temperature cutoff remain active."
             color = "#f1bd61"
         elif mode == "off":
-            text = "Heater output is off. Select AUTO to return to PID temperature control."
-            color = "#aab8bf"
+            text, color = "Heater output is off. Select AUTO to return to PID temperature control.", "#aab8bf"
         else:
-            text = "Safety interlocks active · PID automatic control"
-            color = "#74d5ad"
+            text, color = "Safety interlocks active · PID automatic control", "#74d5ad"
         self.safety_label.setText(text)
         self.safety_label.setStyleSheet(f"color: {color};")
-        if readings_ok:
-            self.connection_label.setText("●  Sensors connected")
-            self.connection_label.setStyleSheet("color: #74d5ad;")
-        else:
-            self.connection_label.setText("●  Sensor fault / waiting")
-            self.connection_label.setStyleSheet("color: #ff827b;")
+        self.connection_label.setText("●  Sensors connected" if readings_ok else "●  Sensor fault / waiting")
+        self.connection_label.setStyleSheet(f"color: {'#74d5ad' if readings_ok else '#ff827b'};")
 
     def refresh_plot(self, *_):
         name = self.sensor_combo.currentText()
@@ -377,6 +404,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.details_window.raise_()
         self.details_window.activateWindow()
         self.details_window.refresh()
+
+    def return_to_dashboard(self):
+        self.details_window.hide()
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
 
     def showEvent(self, event):
         super().showEvent(event)
