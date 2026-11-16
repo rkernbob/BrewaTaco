@@ -29,7 +29,7 @@ class OneWireSensor:
         if not self.simulate and HAS_W1:
             if device_id:
                 # create sensor by ID
-                self._sensor = W1ThermSensor(sensor=W1SensorType.DS18B20, sensor_id=device_id)
+                self._sensor = W1ThermSensor(sensor_type=W1SensorType.DS18B20, sensor_id=device_id)
             else:
                 # fallback: first sensor
                 self._sensor = W1ThermSensor()
