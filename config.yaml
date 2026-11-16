@@ -1,15 +1,16 @@
-# Basic configuration (edit sensor ids / pins to match your wiring)
+# Replace each example one-wire ID with the ID printed by your Raspberry Pi.
 sensors:
   one_wire_ids:
     Mash_tun: "28-00000aaaaaaa"
     Mash_out: "28-00000bbbbbbb"
     RIMS_Kettle: "28-00000ccccccc"
+    Controller_Enclosure: "28-00000ddddddd" # enclosure air / SSR heatsink probe; replace with its actual ID
   max31856_cs_pin: 5   # board pin identifier used by digitalio (e.g. D5) — change if you use CE0/CE1 or another GPIO
 
 control:
   default_target: "Mash_tun"
-  cycle_time_seconds: 2.0     # SSR time-proportional control cycle (seconds)
-  control_interval_s: 0.5     # controller loop interval
+  cycle_time_seconds: 2.0
+  control_interval_s: 0.5
   pid:
     Kp: 30.0
     Ki: 0.5
@@ -19,11 +20,23 @@ control:
 safety:
   RIMS_MAX_C: 95.0
   RIMS_HYSTERESIS_C: 3.0
-  sensor_timeout_s: 10.0   # if a sensor hasn't updated in this many seconds, treat as failure
+  sensor_timeout_s: 10.0
 
 heater:
   gpio_pin: 17   # BCM pin controlling SSR (change if necessary)
 
+# UI color bands only: verify warning/critical temperatures against probe placement,
+# enclosure design, SSR and nearby component ratings. These do not replace safety
+# interlocks or hardware thermal cutouts. Enclosure example values are conservative
+# starting points, not a rating for your particular SSR or enclosure.
+display:
+  temperature_thresholds_c:
+    Mash_tun: {cool_below_c: 35, warning_c: 78, critical_c: 90}
+    Mash_out: {cool_below_c: 35, warning_c: 78, critical_c: 90}
+    RIMS_Kettle: {cool_below_c: 35, warning_c: 90, critical_c: 95}
+    Boil_kettle: {cool_below_c: 35, warning_c: 105, critical_c: 115}
+    Controller_Enclosure: {cool_below_c: 25, warning_c: 45, critical_c: 55}
+
 logging:
   sample_interval_s: 1.0
-  history_length: 3600   # number of samples to retain per sensor (at sample_interval)
+  history_length: 3600
