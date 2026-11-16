@@ -74,10 +74,11 @@ Before running against real hardware:
 
 The `--simulate` option substitutes simulated sensor/heater behavior; it does not validate physical wiring, real sensors, or hardware safety devices.
 
-Key control values in `config.yaml`:
+Key control and update-interval values in `config.yaml`:
 
 - `control.cycle_time_seconds`: the full duration of one heater duty cycle, in seconds. The controller switches the heater on and off across this window to achieve the requested duty percentage; shorter cycles respond more quickly, while longer cycles smooth the output. A value like `2.0` means the SSR can be on for 1.0s and off for 1.0s at 50% duty.
 - `control.control_interval_s`: how often the application recalculates the PID output and updates the heater duty, in seconds. This should be short enough to keep the temperature loop responsive, but not so short that it overburdens the CPU or causes unnecessary chattering. A value like `0.5` means the controller checks and updates roughly twice per second.
+- `logging.sample_interval_s`: how often the application polls sensors and sends updated readings to the GUI, in seconds. This setting therefore determines the approximate refresh interval for displayed temperatures. For example, `1.0` means readings are typically refreshed about once per second; actual timing may vary with sensor read duration.
 
 ## Project files
 
