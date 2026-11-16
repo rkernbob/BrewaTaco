@@ -1,53 +1,98 @@
-Direct answer / what I built for you
-- I prepared a complete PySide6-based GUI application (ready to run on your Raspberry Pi 4) that integrates:
-  - 3 DS18B20 one-wire sensors + 1 MAX31856 thermocouple sensor,
-  - a PID control loop that targets any selectable sensor,
-  - time-proportional SSR heater control,
-  - RIMS over-temperature cutoff with hysteresis and PID integrator reset,
-  - a responsive PySide6 GUI using pyqtgraph for live plots and control widgets,
-  - a threaded architecture with safe communication to the GUI.
+# BrewaTaco
 
-What I did and why
-- I implemented the full app as small modules so you can inspect/modify parts easily (sensors, PID, heater, controller, GUI).
-- The sensor poller runs in its own thread and keeps bounded ring buffers to avoid unbounded memory use.
-- The control loop runs separately and outputs a duty cycle to the heater using time-proportional control (configurable cycle time).
-- The GUI subscribes to periodic data updates via Qt Signals and updates plots at a modest rate (default 1 Hz) to keep CPU usage low.
-- Safety rules (RIMS cutoff, hysteresis, integrator reset, sensor watchdog) are implemented in the controller.
+BrewaTaco is a Python temperature-monitoring and mash-control application designed for a Raspberry Pi 4. It provides a PySide6 touchscreen-friendly dashboard, live temperature plots, PID control, and guarded SSR output control.
 
-Files included (paste-ready)
-- requirements.txt
-- config.yaml
-- pid_controller.py
-- sensors.py
-- heater.py
-- controller.py
-- gui.py
-- run.py
-- brewataco.service (systemd example)
+> **Safety:** Keep the heater disconnected while installing and testing. Software interlocks are not a substitute for correctly rated hardware thermal cutoffs, safe electrical wiring, or supervision. Verify sensor readings and safety behavior before connecting a heater. The configured temperature display bands are informational and do not certify safe operating limits.
 
-Below are the files. Save them into a directory on your Pi (for example /home/pi/brewataco/) and follow the run instructions after the files.
+## Features
 
+- Reads configured DS18B20 one-wire probes and a MAX31856 thermocouple.
+- Displays sensor readings, connection status, heater mode, and a live temperature plot.
+- Supports automatic PID control and manual heater-off/full modes.
+- Applies a sensor watchdog and RIMS over-temperature cutoff with hysteresis; these interlocks override manual output modes.
+- Offers a simulation mode for exercising the application without sensor hardware.
 
-Safety notes (critical)
-- Keep heater disconnected while testing until you verify software behavior. You already stated heater is disconnected for testing — good.
-- Add hardware thermal cutouts for boilers and overtemp conditions as a backup to software.
-- SSRs: use an SSR or contactor rated for heater current; add snubbers/fans as needed. If you use a mechanical relay, avoid fast switching.
-- Validate that RIMS cutout trips correctly by temporarily simulating RIMS high reading (or heat sensor gently) before connecting heater.
+## Requirements
 
-PID tuning suggestions
-- Start with modest Kp and Ki = 0, Kd small. Increase Kp until you see fast response without oscillation. Introduce Ki slowly to remove steady-state error. Use small Kd to damp oscillations.
-- Use a long SSR cycle_time (2–5 s) to avoid frequent switching and to match the thermal mass of brew equipment.
-- The config file stores initial Kp/Ki/Kd; tune by changing config and restarting or adding runtime tuning controls later.
+- Raspberry Pi 4 running Raspberry Pi OS (or another supported Linux system) and Python 3.
+- Hardware interfaces and libraries appropriate to your sensors and GPIO setup for real-hardware operation.
+- Git, if you are cloning this repository.
 
-What’s next / how I can help further
-- I can extend the GUI with:
-  - Runtime PID tuning controls, profile/step-mash scheduler, event logging, alarm dialogs, on-screen toggles for heater enable/disable, and CSV logging.
-  - A service-safe shutdown flow and a small web API (HTTP) for remote monitoring via SSH tunnel or LAN.
-  - Tighten MAX31856 initialization to allow CE0/CE1 use or spidev fallback if you prefer spidev.
-- I can also create a single packaged executable or a prebuilt systemd integration that auto-updates on Git.
+## Install and run
 
-Would you like me to:
-- Add runtime PID tuning controls and step-mash program support in the GUI?
-- Improve MAX31856 initialization to support CE0/CE1 and spidev fallback for your specific wiring?
+Run these commands from a terminal on the Pi. If you already have the project directory, start with `cd` into it; otherwise clone the repository first:
 
-If you want, tell me the exact one-wire IDs and which pin you used for MAX31856 CS and the SSR GPIO (or confirm what you used in config.yaml), and I will tailor the config and the code snippet for that wiring and optionally push a small repository patch.
+```bash
+git clone https://github.com/rkernbob/BrewaTaco.git
+cd BrewaTaco
+```
+
+Create and activate a virtual environment (the creation step is needed only once):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+If creating the environment reports that `venv` is unavailable, install the OS package that provides it (typically `python3-venv`), then retry. With the environment active, install the Python dependencies:
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Start the application with hardware enabled:
+
+```bash
+python run.py
+```
+
+To start the GUI in simulation mode without accessing the physical sensors or heater, run:
+
+```bash
+python run.py --simulate
+```
+
+Press **Ctrl+C** in the terminal to stop the application. When you open a new terminal later, activate the existing environment again before running the app:
+
+```bash
+cd ~/BrewaTaco
+source .venv/bin/activate
+python run.py
+```
+
+Leave the environment with `deactivate` when finished. The `.venv` directory is local to your checkout and should not be committed.
+
+## Hardware and configuration
+
+Before running against real hardware:
+
+1. Enable and verify the Raspberry Pi interfaces required by your wiring (one-wire and SPI, as applicable).
+2. Edit `config.yaml`: replace the example one-wire sensor IDs with the IDs detected on your Pi, and check the MAX31856 chip-select and heater GPIO settings against your actual wiring.
+3. Check all sensor names and probe locations, control and safety settings, and wiring before enabling heater output. Treat the supplied pin values, IDs, PID settings, and temperature thresholds as examples to verify for your equipment.
+4. First run with the heater disconnected. Confirm that sensors report plausible readings and test the interface in simulation mode. Have independent, correctly rated hardware over-temperature protection in place before any heater testing.
+
+The `--simulate` option substitutes simulated sensor/heater behavior; it does not validate physical wiring, real sensors, or hardware safety devices.
+
+## Project files
+
+- `run.py` — application entry point (`--config` selects a configuration file; `--simulate` enables simulation).
+- `config.yaml` — sensor IDs, pin settings, control parameters, safety limits, and display thresholds.
+- `gui.py` — PySide6 dashboard and temperature plots.
+- `controller.py` — sensor polling, PID control, and safety interlocks.
+- `sensors.py` — DS18B20 and MAX31856 sensor interfaces.
+- `pid_controller.py` — PID implementation.
+- `heater.py` — time-proportional heater output control.
+- `requirements.txt` — Python package dependencies.
+- `brewataco.service` — example systemd unit; edit its user, paths, and Python executable to match your installation before using it.
+
+## Troubleshooting
+
+- **`python3 -m venv` fails:** install the OS package that provides Python's `venv` module, then recreate the environment.
+- **A Python module is missing:** activate `.venv` and run `python -m pip install -r requirements.txt` again.
+- **Sensor readings are missing:** check the configured sensor IDs, enabled interfaces, wiring, and permissions. The GUI indicates missing readings; the controller watchdog forces heater output to zero when sensor data is unhealthy.
+- **GUI does not open:** run from the Pi's graphical desktop session and inspect the terminal output for Qt or display errors.
+
+## Development notes
+
+The GUI receives periodic updates from the controller. Sensor polling and control run in background threads, and temperature history is bounded by the `logging.history_length` setting in `config.yaml`.
