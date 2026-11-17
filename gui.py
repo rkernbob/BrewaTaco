@@ -149,7 +149,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
-        self.setWindowTitle("BrewaTaco Controller")
+        self.setWindowTitle("Kern Brewing")
         self.setMinimumSize(900, 600)
         self.setStyleSheet(APP_STYLE)
         pg.setConfigOptions(antialias=False, background="#101820", foreground="#dce7eb")
