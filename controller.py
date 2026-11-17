@@ -53,7 +53,15 @@ class Controller:
             output_limits=(0.0, 100.0),
             integrator_limit=pid_cfg.get("integrator_limit"),
         )
-        self.target_sensor_name = default_target
+        # Do not silently select a different probe if the configured target is
+        # missing. The operator must explicitly choose a detected sensor.
+        self.target_sensor_name = (
+            default_target
+            if isinstance(default_target, str)
+            and default_target in self.sensors
+            and getattr(self.sensors[default_target], "available", True)
+            else None
+        )
         if not isinstance(default_target, str):
             self.pid.setpoint = float(default_target)
 
@@ -80,6 +88,13 @@ class Controller:
         with self._mode_lock:
             return self._output_mode
 
+    @property
+    def available_sensor_names(self):
+        return [
+            name for name, sensor in self.sensors.items()
+            if getattr(sensor, "available", True)
+        ]
+
     def set_output_mode(self, mode):
         if mode not in {"auto", "off", "full"}:
             raise ValueError("Output mode must be 'auto', 'off', or 'full'.")
@@ -89,6 +104,8 @@ class Controller:
     def set_target_sensor(self, sensor_name):
         if sensor_name not in self.sensors:
             raise ValueError(f"Unknown sensor: {sensor_name}")
+        if not getattr(self.sensors[sensor_name], "available", True):
+            raise ValueError(f"Sensor is unavailable: {sensor_name}")
         self.target_sensor_name = sensor_name
 
     def stop(self):
@@ -132,11 +149,19 @@ class Controller:
                 }
 
             now = time.time()
-            sensor_ok = all(
-                timestamp is not None
-                and value is not None
-                and now - timestamp <= self.sensor_timeout
-                for timestamp, value in latest.values()
+            mode = self.output_mode
+            # Unrelated display probes may be unavailable without stopping
+            # heater control. RIMS remains a mandatory over-temperature
+            # interlock; AUTO also requires its selected target probe.
+            required_sensors = ["RIMS_Kettle"]
+            if mode == "auto" and self.target_sensor_name:
+                required_sensors.append(self.target_sensor_name)
+            sensor_ok = bool(self.target_sensor_name or mode != "auto") and all(
+                name in latest
+                and latest[name][0] is not None
+                and latest[name][1] is not None
+                and now - latest[name][0] <= self.sensor_timeout
+                for name in required_sensors
             )
 
             rims_entry = latest.get("RIMS_Kettle")
@@ -151,27 +176,25 @@ class Controller:
                     rims_disabled = False
 
             if not sensor_ok or rims_disabled:
-                # Sensor watchdog and RIMS cutoff always override manual output.
+                # Required-sensor watchdog and RIMS cutoff override manual output.
                 self.heater.set_duty(0.0)
+            elif mode == "off":
+                self.heater.set_duty(0.0)
+            elif mode == "full":
+                self.heater.set_duty(100.0)
             else:
-                mode = self.output_mode
-                if mode == "off":
-                    self.heater.set_duty(0.0)
-                elif mode == "full":
-                    self.heater.set_duty(100.0)
+                measurement = None
+                if isinstance(self.target_sensor_name, str):
+                    entry = latest.get(self.target_sensor_name)
+                    measurement = entry[1] if entry else None
+                try:
+                    setpoint = float(self.pid.setpoint)
+                except (TypeError, ValueError):
+                    setpoint = None
+                if measurement is not None and setpoint is not None:
+                    self.heater.set_duty(self.pid.update(measurement))
                 else:
-                    measurement = None
-                    if isinstance(self.target_sensor_name, str):
-                        entry = latest.get(self.target_sensor_name)
-                        measurement = entry[1] if entry else None
-                    try:
-                        setpoint = float(self.pid.setpoint)
-                    except (TypeError, ValueError):
-                        setpoint = None
-                    if measurement is not None and setpoint is not None:
-                        self.heater.set_duty(self.pid.update(measurement))
-                    else:
-                        self.heater.set_duty(0.0)
+                    self.heater.set_duty(0.0)
 
             elapsed = time.time() - loop_started
             time.sleep(max(0.0, self._control_interval - elapsed))
@@ -182,4 +205,3 @@ class Controller:
         if max_points and len(history) > max_points:
             return history[-max_points:]
         return history
-
