@@ -150,21 +150,13 @@ QProgressBar::chunk {
 QRadioButton { spacing: 8px; }
 """
 
-# Updated tuple format: (card_bg, text_fg, border_color)
-COLORS = {
-    "cool":     ("#122c40", "#7ccbfa", "#4db5f5"),
-    "normal":   ("#11332c", "#6ee7b7", "#2ec492"),
-    "warning":  ("#3d2c10", "#fcd34d", "#f59e0b"),
-    "critical": ("#45161a", "#fca5a5", "#ef4444"),
-    "unknown":  ("#1d272e", "#8fa1ab", "#5a6d78"),
-}
-
 
 class SensorCard(QtWidgets.QFrame):
     def __init__(self, name, thresholds, display_name=None, compact=False):
         super().__init__()
         self.thresholds = thresholds
         self.setObjectName("card")
+        self.setProperty("state", "unknown")
         self.setMinimumHeight(68 if compact else 78)
         self.setMaximumHeight(78 if compact else 92)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
@@ -206,11 +198,14 @@ class SensorCard(QtWidgets.QFrame):
         else:
             severity, state = self._severity(float(reading))
             self.value_label.setText(f"{reading:.1f} °C")
-        background, foreground = COLORS[severity]
-        self.setStyleSheet(
-            f"QFrame#card {{ background-color: {background}; border: 1px solid {foreground}; border-radius: 12px; }}"
-            f"QFrame#card QLabel {{ color: {foreground}; }}"
-        )
+
+        # APP_STYLE defines the card background, border, and label colors for
+        # each state. Refresh the stylesheet after changing the selector property.
+        self.setProperty("state", severity)
+        style = self.style()
+        style.unpolish(self)
+        style.polish(self)
+        self.update()
         self.state_label.setText(state)
 
 
