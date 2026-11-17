@@ -23,6 +23,7 @@ QComboBox QAbstractItemView { background: #1b2933; selection-background-color: #
 QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { width: 28px; }
 QProgressBar { background: #0e171d; border: 0; border-radius: 7px; min-height: 14px; text-align: center; }
 QProgressBar::chunk { background: #24b49e; border-radius: 7px; }
+QRadioButton { spacing: 8px; }
 """
 
 COLORS = {
@@ -209,30 +210,41 @@ class MainWindow(QtWidgets.QMainWindow):
 
         plot_panel = QtWidgets.QFrame()
         plot_panel.setObjectName("panel")
-        plot_panel.setMaximumHeight(235)
+        plot_panel.setMinimumHeight(260)
+        plot_panel.setMaximumHeight(420)
         plot_layout = QtWidgets.QVBoxLayout(plot_panel)
         plot_layout.setContentsMargins(12, 7, 12, 7)
-        plot_layout.setSpacing(4)
+        plot_layout.setSpacing(6)
+
         plot_header = QtWidgets.QHBoxLayout()
         plot_title = QtWidgets.QLabel("Live temperature")
         plot_title.setObjectName("pageTitle")
         plot_header.addWidget(plot_title)
         plot_header.addStretch(1)
-        plot_header.addWidget(QtWidgets.QLabel("Control Temp"))
-        self.sensor_combo = QtWidgets.QComboBox()
-        self.sensor_combo.addItems(self.sensor_names)
-        configured_sensor = str(controller.target_sensor_name)
-        if configured_sensor in self.sensor_names:
-            self.sensor_combo.setCurrentText(configured_sensor)
-        self.sensor_combo.setMinimumWidth(180)
-        plot_header.addWidget(self.sensor_combo)
+
+        # Chart selector is separate from control logic.
+        self.plot_sensor_group = QtWidgets.QButtonGroup(self)
+        self.plot_sensor_group.setExclusive(True)
+        self.plot_buttons = {}
+        self.plot_sensor_name = "Mash_tun" if "Mash_tun" in self.sensor_names else self.sensor_names[0]
+
+        selector_row = QtWidgets.QHBoxLayout()
+        selector_row.setSpacing(8)
+        for name in self.sensor_names:
+            button = QtWidgets.QRadioButton(name.replace("_", " "))
+            button.setChecked(name == self.plot_sensor_name)
+            self.plot_buttons[name] = button
+            self.plot_sensor_group.addButton(button)
+            selector_row.addWidget(button)
+
+        plot_header.addLayout(selector_row)
         plot_layout.addLayout(plot_header)
 
         self.plot = pg.PlotWidget()
         self.plot.showGrid(x=True, y=True, alpha=0.25)
         self.plot.setLabel("left", "Temperature", units="°C")
         self.plot.setLabel("bottom", "Elapsed time", units="s")
-        self.plot.setMinimumHeight(135)
+        self.plot.setMinimumHeight(220)
         self.temperature_curve = self.plot.plot(pen=pg.mkPen("#42d6bd", width=3))
         self.setpoint_line = pg.InfiniteLine(
             angle=0,
@@ -269,20 +281,38 @@ class MainWindow(QtWidgets.QMainWindow):
         mode_group = QtWidgets.QVBoxLayout()
         mode_label = QtWidgets.QLabel("Heater quick controls")
         mode_label.setObjectName("eyebrow")
-        buttons = QtWidgets.QHBoxLayout()
+
         self.auto_button = QtWidgets.QPushButton("AUTO")
         self.off_button = QtWidgets.QPushButton("HEATER\nOFF")
         self.full_button = QtWidgets.QPushButton("HEATER\n100%")
         self.mode_buttons = {"auto": self.auto_button, "off": self.off_button, "full": self.full_button}
+
+        buttons = QtWidgets.QVBoxLayout()
         for mode, button in self.mode_buttons.items():
             button.setCheckable(True)
             button.setMinimumHeight(66)
             button.setMinimumWidth(112)
             button.clicked.connect(lambda checked=False, selected=mode: self.set_output_mode(selected))
-            buttons.addWidget(button, 1)
+            buttons.addWidget(button)
+
         mode_group.addWidget(mode_label)
         mode_group.addLayout(buttons)
         controls_layout.addLayout(mode_group, 4)
+
+        control_temp_group = QtWidgets.QVBoxLayout()
+        control_temp_label = QtWidgets.QLabel("Control temperature")
+        control_temp_label.setObjectName("eyebrow")
+        self.control_sensor_combo = QtWidgets.QComboBox()
+        self.control_sensor_combo.addItems(self.sensor_names)
+        configured_sensor = str(controller.target_sensor_name)
+        if configured_sensor in self.sensor_names:
+            self.control_sensor_combo.setCurrentText(configured_sensor)
+        else:
+            self.control_sensor_combo.setCurrentIndex(0)
+        self.control_sensor_combo.setMinimumWidth(180)
+        control_temp_group.addWidget(control_temp_label)
+        control_temp_group.addWidget(self.control_sensor_combo)
+        controls_layout.addLayout(control_temp_group, 2)
 
         output_group = QtWidgets.QVBoxLayout()
         output_label = QtWidgets.QLabel("Heater output")
@@ -305,7 +335,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.details_window = DetailsWindow(controller, self.return_to_dashboard)
         self.details_button.clicked.connect(self.show_details)
-        self.sensor_combo.currentTextChanged.connect(self.refresh_plot)
+
+        # Plot selector is independent from control logic.
+        self.plot_sensor_group.buttonClicked.connect(self.on_plot_sensor_changed)
+        self.control_sensor_combo.currentTextChanged.connect(self.on_control_sensor_changed)
         self.target_spin.valueChanged.connect(self.on_target_changed)
         controller.signals.data_updated.connect(self.on_data_updated)
 
@@ -329,6 +362,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controller.pid.setpoint = float(value)
         self._update_setpoint_line()
 
+    def on_control_sensor_changed(self, name):
+        if not name:
+            return
+        self.controller.target_sensor_name = name
+        self._update_setpoint_line()
+
     def set_output_mode(self, mode):
         self.controller.set_output_mode(mode)
         self._sync_mode_buttons(mode)
@@ -347,6 +386,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.setpoint_line.setValue(float(self.controller.pid.setpoint))
         except (TypeError, ValueError):
             pass
+
+    def on_plot_sensor_changed(self, button):
+        self.plot_sensor_name = next(
+            sensor
+            for sensor, radio in self.plot_buttons.items()
+            if radio is button
+        )
+        self.refresh_plot()
 
     def on_data_updated(self, payload):
         latest = payload.get("latest", {})
@@ -383,7 +430,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.connection_label.setStyleSheet(f"color: {'#74d5ad' if readings_ok else '#ff827b'};")
 
     def refresh_plot(self, *_):
-        name = self.sensor_combo.currentText()
+        name = self.plot_sensor_name
         if not name:
             return
         history = self.controller.get_history(name, max_points=600)
