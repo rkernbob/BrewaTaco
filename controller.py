@@ -86,6 +86,11 @@ class Controller:
         with self._mode_lock:
             self._output_mode = mode
 
+    def set_target_sensor(self, sensor_name):
+        if sensor_name not in self.sensors:
+            raise ValueError(f"Unknown sensor: {sensor_name}")
+        self.target_sensor_name = sensor_name
+
     def stop(self):
         self._stop = True
         self.heater.stop()
@@ -177,3 +182,4 @@ class Controller:
         if max_points and len(history) > max_points:
             return history[-max_points:]
         return history
+
