@@ -5,33 +5,158 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 
 APP_STYLE = """
-QWidget { background: #101820; color: #eef4f6; font-family: sans-serif; font-size: 16px; }
-QLabel#muted { color: #9aabb5; }
-QLabel#eyebrow { color: #9aabb5; font-size: 13px; font-weight: 600; }
-QLabel#temperature { font-size: 29px; font-weight: 700; }
-QLabel#pageTitle { font-size: 24px; font-weight: 700; }
-QFrame#card, QFrame#panel { background: #1b2933; border: 1px solid #2d414e; border-radius: 12px; }
-QPushButton { background: #2b414e; border: 1px solid #3c5664; border-radius: 9px; min-height: 48px; padding: 0 16px; font-weight: 600; }
-QPushButton:hover { background: #385362; }
-QPushButton:checked { border: 2px solid #eef4f6; }
-QPushButton#primary { background: #147d78; border-color: #1b9b91; }
-QPushButton#primary:hover { background: #19958d; }
-QPushButton#danger { background: #923d3c; border-color: #b94d48; }
-QPushButton#warning { background: #8a6424; border-color: #c49336; }
-QComboBox, QDoubleSpinBox { background: #0e171d; border: 1px solid #3c5664; border-radius: 8px; min-height: 48px; padding: 0 10px; font-size: 20px; }
-QComboBox QAbstractItemView { background: #1b2933; selection-background-color: #147d78; }
-QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { width: 28px; }
-QProgressBar { background: #0e171d; border: 0; border-radius: 7px; min-height: 14px; text-align: center; }
-QProgressBar::chunk { background: #24b49e; border-radius: 7px; }
+QWidget {
+    background: #0d141a;
+    color: #f0f5f8;
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+/* Ensure labels inside tinted state cards don't inherit the dark #0d141a background */
+QFrame#card QLabel, QFrame#panel QLabel {
+    background: transparent;
+}
+
+QLabel#muted {
+    color: #a3b5bf;
+    font-weight: 600;
+}
+
+QLabel#eyebrow {
+    color: #b4c4ce;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+}
+
+QLabel#temperature {
+    font-size: 36px;
+    font-weight: 800;
+}
+
+QLabel#pageTitle {
+    font-size: 24px;
+    font-weight: 800;
+}
+
+/* Base panel & default card */
+QFrame#panel, QFrame#card {
+    background: #17232c;
+    border: 2px solid #2d414e;
+    border-radius: 12px;
+}
+
+/* --- Dynamic State Cards (High-Contrast for Translucent Door Viewing) --- */
+QFrame#card[state="cool"] {
+    background: #122c40;
+    border: 2px solid #4db5f5;
+}
+QFrame#card[state="cool"] QLabel#temperature {
+    color: #7ccbfa;
+}
+QFrame#card[state="cool"] QLabel#muted {
+    color: #bce4fc;
+}
+
+QFrame#card[state="normal"] {
+    background: #11332c;
+    border: 2px solid #2ec492;
+}
+QFrame#card[state="normal"] QLabel#temperature {
+    color: #6ee7b7;
+}
+QFrame#card[state="normal"] QLabel#muted {
+    color: #bbf7d0;
+}
+
+QFrame#card[state="warning"] {
+    background: #3d2c10;
+    border: 3px solid #f59e0b;
+}
+QFrame#card[state="warning"] QLabel#temperature {
+    color: #fcd34d;
+}
+QFrame#card[state="warning"] QLabel#muted {
+    color: #fef08a;
+}
+
+QFrame#card[state="critical"] {
+    background: #45161a;
+    border: 3px solid #ef4444;
+}
+QFrame#card[state="critical"] QLabel#temperature {
+    color: #fca5a5;
+}
+QFrame#card[state="critical"] QLabel#muted {
+    color: #fecaca;
+}
+
+QFrame#card[state="unknown"] {
+    background: #1d272e;
+    border: 2px dashed #5a6d78;
+}
+QFrame#card[state="unknown"] QLabel#temperature {
+    color: #8fa1ab;
+}
+
+/* --- Buttons & Inputs --- */
+QPushButton {
+    background: #263a47;
+    border: 2px solid #3c5664;
+    border-radius: 9px;
+    min-height: 48px;
+    padding: 0 16px;
+    font-weight: 700;
+}
+QPushButton:hover { background: #334d5d; }
+QPushButton:checked { border: 3px solid #ffffff; }
+
+QPushButton#primary { background: #0f766e; border-color: #2dd4bf; }
+QPushButton#primary:hover { background: #149187; }
+
+QPushButton#danger { background: #991b1b; border-color: #f87171; }
+QPushButton#danger:hover { background: #b91c1c; }
+
+QPushButton#warning { background: #92400e; border-color: #fbbf24; }
+QPushButton#warning:hover { background: #b45309; }
+
+QComboBox, QDoubleSpinBox {
+    background: #0b1217;
+    border: 2px solid #3c5664;
+    border-radius: 8px;
+    min-height: 48px;
+    padding: 0 10px;
+    font-size: 20px;
+    font-weight: 700;
+}
+QComboBox QAbstractItemView {
+    background: #17232c;
+    selection-background-color: #0f766e;
+}
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { width: 32px; }
+
+QProgressBar {
+    background: #0b1217;
+    border: 1px solid #2d414e;
+    border-radius: 7px;
+    min-height: 16px;
+    text-align: center;
+    font-weight: 700;
+}
+QProgressBar::chunk {
+    background: #24b49e;
+    border-radius: 6px;
+}
 QRadioButton { spacing: 8px; }
 """
 
+# Updated tuple format: (card_bg, text_fg, border_color)
 COLORS = {
-    "cool": ("#18344a", "#62b9ee"),
-    "normal": ("#193b35", "#74d5ad"),
-    "warning": ("#49391d", "#f1bd61"),
-    "critical": ("#4a2528", "#ff827b"),
-    "unknown": ("#26333b", "#aab8bf"),
+    "cool":     ("#122c40", "#7ccbfa", "#4db5f5"),
+    "normal":   ("#11332c", "#6ee7b7", "#2ec492"),
+    "warning":  ("#3d2c10", "#fcd34d", "#f59e0b"),
+    "critical": ("#45161a", "#fca5a5", "#ef4444"),
+    "unknown":  ("#1d272e", "#8fa1ab", "#5a6d78"),
 }
 
 
